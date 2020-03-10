@@ -128,6 +128,7 @@ function downloadPicture(string $url, string $date_str, int $n):string
     copy($url, $tmp_name);
 
     $width = getimagesize($tmp_name)[0];
+    // Картинки шириной 2000+ пикселей считаем пригодными для Ретины
     if ($width >= 2000) {
         $new_name = sprintf("%s%s.%s@2x.jpg", $cache_dir, $date_str, $n);
     } else {
@@ -175,7 +176,7 @@ function fixPictures(string $content, array $info):string
 
 /**
  * Получить транслитератор, если получать несколько раз,
- * он перестаёт работать
+ * он перестаёт работать, поэтому тут кеширование
  * @return Transliterator
  */
 function getTrans():Transliterator
@@ -261,10 +262,17 @@ function fixLinks(string $content):string
     return $content;
 }
 
+/**
+ * Преобразовать в транслит
+ * @param string $cyr Строка в кириллице
+ * @return string
+ */
 function toTranslit(string $cyr):string
 {
     $latin = getTrans()->transliterate($cyr);
+    // После этой конвертации всякие умляуты отпадают как отдельные символы
     $latin = iconv("UTF-8", "ASCII//TRANSLIT", $latin);
+    // Умляуты и прочее выкидываем
     $latin = preg_replace('/[^a-z-]/s', '', $latin);
 
     return $latin;
@@ -362,6 +370,11 @@ function fixMarkup(string $content, array $info):string
     return trim($content);
 }
 
+/**
+ * Получаем теги к заметке
+ * @param string $content Содержимое заметки
+ * @return array массив пар — транслитерация и текст тегов
+ */
 function getTags(string $content):array
 {
     $xhtml = tidy_repair_string($content, ['output-xml' => true,]);
@@ -448,6 +461,7 @@ foreach (c(fn() => getNoteLinks(BASE_URL), 'note_links') as $url) {
     $content = c(fn() => getNote($url), 'note_'.sha1($url));
     $info = parseNote($content);
 
+    // SQL для заметок
     fprintf($fp, <<<'SQL'
     INSERT INTO e2BlogNotes
     (
@@ -468,6 +482,9 @@ foreach (c(fn() => getNoteLinks(BASE_URL), 'note_links') as $url) {
     foreach ($info['tags'] as [$tag, $name]) {
         $etag = addcslashes($tag, "\n\r\0'");
 
+        // SQL вставки тегов в таблицу тегов и связь с заметками.
+        // С ID заметок я решил не связываться, дата и время является
+        // достаточный маркером
         fprintf($tp, <<<'SQL'
             INSERT INTO e2BlogKeywords (Keyword, OriginalAlias, Uploads, IsFavourite)
             SELECT '%s', '%2$s', 'a:0:{}', 0
