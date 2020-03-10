@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 const BASE_DATE = '20170923015827';
 const BASE_URL = 'https://web.archive.org/web/'.BASE_DATE.'/http://glazelki.ru:80/';
+const INFO = true;
 
 /**
  * Функия кеширования ответа
@@ -22,7 +23,7 @@ function c(callable $fn, string $key) /*:mixed*/
     $key = strtr($key, ['/' => '_']);
 
     if (file_exists($cache_file)) {
-        printf("Got cache: %s\n", $key);
+        INFO and printf("Got cache: %s\n", $key);
         return unserialize(file_get_contents($cache_file));
     } else {
         $content = $fn();
@@ -47,7 +48,7 @@ function getNoteLinks(string $url): array
     $notes = [];
 
     do {
-        printf("Getting %s\n", $url);
+        INFO and printf("Getting %s\n", $url);
         $content = file_get_contents($url);
         if ($content === false) {
             throw new RuntimeException();
@@ -73,7 +74,7 @@ function getNoteLinks(string $url): array
         }
     } while ($url !== false);
 
-    printf("Received %d urls.\n", count($notes));
+    INFO and printf("Received %d urls.\n", count($notes));
 
     return array_values($notes);
 }
@@ -85,7 +86,7 @@ function getNoteLinks(string $url): array
  */
 function getNote(string $url):string
 {
-    printf("Getting %s\n", $url);
+    INFO and printf("Getting %s\n", $url);
     $content = file_get_contents($url);
 
     if ($content === false) {
@@ -102,7 +103,7 @@ function getNote(string $url):string
  * @param int $n
  * @return string Новое имя
  */
-function downloadPicture(string $url, string $date_str, int $n):string
+function downloadPicture(string $url, string $date_str, int $n):?string
 {
     $cache_dir = __DIR__.'/pictures/';
 
@@ -115,7 +116,7 @@ function downloadPicture(string $url, string $date_str, int $n):string
 
     if ($files && filesize($files[0]) > 0) {
         $new_name = basename($files[0]);
-        printf("Got cache: %s\n", $new_name);
+        INFO and printf("Got cache: %s\n", $new_name);
 
         return $new_name;
     }
@@ -123,8 +124,13 @@ function downloadPicture(string $url, string $date_str, int $n):string
     $tmp_name = tempnam(sys_get_temp_dir(), 'glaz');
     $url = preg_replace('/_[a-z]+(?:\.[.a-z]+)?$/i', '_orig', $url);
 
-    printf("Downloading %s\n", $url);
-    copy($url, $tmp_name);
+    INFO and printf("Downloading %s\n", $url);
+    // Потом руками поправлю, если будут битые картинки
+    if (!@copy($url, $tmp_name)) {
+        INFO and printf("Broken url: %s\n", $url);
+
+        return null;
+    }
 
     $width = getimagesize($tmp_name)[0];
     // Картинки шириной 2000+ пикселей считаем пригодными для Ретины
@@ -445,6 +451,7 @@ function parseNote(string $content):array
     $info['tags'] = getTags($content);
 
     $info['images'] = extractImages($info['text']);
+    $info['comments'] = getComments($content);
 
     return $info;
 }
@@ -473,19 +480,137 @@ function escape(string $str):string
     return addcslashes($str, "\n\r\0'");
 }
 
+/**
+ * Копирует аватар из интернета
+ * @param string $url
+ * @param string $name
+ */
+function getAvatar(string $url, string $name):void
+{
+    $cache_dir = __DIR__.'/pictures/avatar/';
+    if (!file_exists($cache_dir)) {
+        mkdir($cache_dir);
+    }
+
+    $cache_name = $cache_dir.$name;
+    if (!file_exists($cache_name)) {
+        if (!@copy($url, $cache_name)) {
+            INFO and printf("Error downloading: $url ($name)\n");
+        }
+    }
+}
+
+/**
+ * Выделяет информацию из комментария
+ * @param string $part
+ * @return array
+ * @throws Exception
+ */
+function getComment(string $part):array
+{
+    $xhtml = tidy_repair_string($part, ['output-xml' => true,]);
+    $xhtml = '<?xml version="1.0" encoding="UTF-8"?>'.$xhtml;
+
+    $doc = new DOMDocument();
+    $doc->preserveWhiteSpace = false;
+    libxml_use_internal_errors(true);
+    $doc->loadHTML($xhtml);
+    $xpath = new DOMXPath($doc);
+
+    $avatar = $xpath->query('//img[contains(@class, "avatar")]');
+    $src = $avatar[0]->attributes->getNamedItem('src')->value;
+
+    // !!! Требуется фейковый адаптер (файл system/gips/email.php) !!!
+    $gip = 'email';
+
+    // Граватарные юзерпики берём с бо́льшим разрешением
+    $src = preg_replace('!^.*?web\.archive\.org/web/[^/]+/!s', '', $src);
+    if (preg_match('!gravatar.com/avatar/([^?]+)\?s=48&(d=.+)$!s', $src, $m)) {
+        $src = sprintf('https://gravatar.com/avatar/%s?s=80&%s', $m[1], $m[2]);
+        $aname = $m[1];
+    } elseif (strpos($src, 'gravatar') !== false) {
+        $src = $aname = $gip = null;
+    } else {
+        $aname = md5($src);
+    }
+
+    $name = preg_replace('/^\s+|\s+$/su', '', $xpath->query('//cite')[0]->nodeValue);
+
+    if (preg_match('/(\d{2})\.(\d{2})\.(\d{4}) в (\d+):(\d+)/su', $part, $m)) {
+        $date_str = sprintf('%d/%d/%d %d:%d:00', $m[3], $m[2], $m[1], $m[4], $m[5]);
+        $ctime = new DateTimeImmutable($date_str, new DateTimeZone('Europe/Moscow'));
+        $stamp = $ctime->format('U');
+    } else {
+        throw new RuntimeException();
+    }
+
+
+    $provider = $xpath->query('//img[@class="loginza_provider_ico"]');
+    if ($provider->length > 0) {
+        $gip_name = $provider[0]->attributes->getNamedItem('alt')->value;
+        if ($gip_name === 'vk.com') {
+            $gip = 'vk';
+        }
+    }
+
+    $body = trim($xpath->query("//div[@class='comment-body']")[0]->textContent);
+
+    if ($aname !== null) {
+        getAvatar($src, "{$gip}-{$aname}.jpg");
+    }
+
+    return [
+        'gip' => $gip,
+        'avatar_src' => $src,
+        'avatar_name' => $aname,
+        'name' => $name,
+        'stamp' => $stamp,
+        'body' => $body,
+    ];
+}
+
+/**
+ * Собирает комментарии к заметке
+ * @param string $content
+ * @return array
+ * @throws Exception
+ */
+function getComments(string $content):array
+{
+    $comments = [];
+
+    if (preg_match_all('@<!-- article-content -->(.*?)<!-- /article-content -->@s', $content, $m)) {
+        foreach ($m[1] as $part) {
+            if (strpos($part, 'comment-author') !== false) {
+                $comments[] = getComment($part);
+            }
+        }
+    }
+
+    return $comments;
+}
+
+
 // Сюда записываем дамп с заметками
-$fp = fopen('dump.sql', 'wb');
+$fp = fopen('dump1.sql', 'wb');
 // Сюда записываем дамп с тегами
 $tp = fopen('dump2.sql', 'wb');
+// Сюда записываем дамп с комментариями
+$cp = fopen('dump3.sql', 'wb');
 
 fwrite($fp, "TRUNCATE TABLE e2BlogNotes;\n");
+fwrite($fp, "DELETE FROM e2BlogAliases WHERE EntityType='n';\n");
 
 fwrite($tp, "TRUNCATE TABLE e2BlogKeywords;\n");
 fwrite($tp, "TRUNCATE TABLE e2BlogNotesKeywords;\n");
 
+fwrite($cp, "TRUNCATE TABLE e2BlogComments;\n");
+
 foreach (c(fn () => getNoteLinks(BASE_URL), 'note_links') as $url) {
     $content = c(fn () => getNote($url), 'note_'.sha1($url));
     $info = parseNote($content);
+
+    $original_alias = strtr(substr(strrchr($url, '/'), 1), ['_' => '-']);
 
     // SQL для заметок
     fprintf(
@@ -495,13 +620,14 @@ foreach (c(fn () => getNoteLinks(BASE_URL), 'note_links') as $url) {
     (
         Title, Text, FormatterID, Uploads, IsPublished, IsCommentable, IsVisible,
         IsFavourite, Stamp, LastModified, Offset, IsDST, IsIndexed, IsExternal,
-        SourceID, SourceNoteURL
+        SourceID, SourceNoteURL, OriginalAlias
     ) VALUES (
         '%s',
         '%s',
         'neasden',
         '%s',
-        1, 1, 1, 0, %3$d, %3$d, 3 * 60 * 60, 0, 0, 0, 0, 0
+        1, 1, 1, 0, %3$d, %3$d, 3 * 60 * 60, 0, 0, 0, 0, 0,
+        '%5$s'
     );
 
     SQL,
@@ -509,6 +635,21 @@ foreach (c(fn () => getNoteLinks(BASE_URL), 'note_links') as $url) {
         escape($info['text']),
         escape(serialize($info['images'])),
         $info['ctime']->format('U'),
+        escape($original_alias),
+    );
+
+    fprintf(
+        $fp,
+        <<<'SQL'
+        INSERT INTO e2BlogAliases(EntityType, EntityID, Alias, Stamp)
+        SELECT 'n',
+            (SELECT id FROM e2BlogNotes WHERE Stamp=%d LIMIT 1),
+            '%s',
+            %1$d FROM DUAL;
+
+        SQL,
+        $info['ctime']->format('U'),
+        escape($original_alias),
     );
 
     foreach ($info['tags'] as [$tag, $name]) {
@@ -534,6 +675,31 @@ foreach (c(fn () => getNoteLinks(BASE_URL), 'note_links') as $url) {
             SQL,
             escape($name),
             escape($tag),
+            $info['ctime']->format('U'),
+        );
+    }
+
+    foreach ($info['comments'] as $comment) {
+        fprintf(
+            $cp,
+            <<<'SQL'
+            INSERT INTO e2BlogComments(
+                AuthorName, Text, IsVisible, Stamp, LastModified, IsGIPUsed, GIP, GIPAuthorID, NoteID
+            ) VALUES (
+                '%s',
+                '%s',
+                1, %d, %d, %d, '%s', '%s',
+                (SELECT id FROM e2BlogNotes WHERE Stamp=%d LIMIT 1)
+            );
+
+            SQL,
+            escape($comment['name']),
+            escape($comment['body']),
+            $comment['stamp'],
+            $comment['stamp'],
+            $comment['gip'] === null ? 0 : 1,
+            $comment['gip'],
+            $comment['avatar_name'],
             $info['ctime']->format('U'),
         );
     }
