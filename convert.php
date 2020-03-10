@@ -55,7 +55,7 @@ function getNoteLinks(string $url): array
 
         // Ищем переходы на страницы
         if (preg_match_all($page_pat, $content, $m)) {
-            $pages += array_fill_keys($m[1],false);
+            $pages += array_fill_keys($m[1], false);
         }
 
         // ищем ссылки на заметки
@@ -71,7 +71,6 @@ function getNoteLinks(string $url): array
         } else {
             $url = false;
         }
-
     } while ($url !== false);
 
     printf("Received %d urls.\n", count($notes));
@@ -241,7 +240,7 @@ function fixLinks(string $content):string
 
             switch (true) {
                 case strpos($href, 'tag') === 0:
-                    [$base, $path] = explode('/', urldecode($href));
+                    $path = explode('/', urldecode($href))[1];
                     $latin = toTranslit($path);
                     $links[$tag] = sprintf('[[/tags/%s %s]]', $latin, $text);
                     break;
@@ -344,7 +343,8 @@ function fixMarkup(string $content, array $info):string
             '–',
             ' ',
         ],
-    $content);
+        $content
+    );
 
     $content = fixPictures($content, $info);
 
@@ -444,7 +444,33 @@ function parseNote(string $content):array
     $info['text'] = fixMarkup($text, $info);
     $info['tags'] = getTags($content);
 
+    $info['images'] = extractImages($info['text']);
+
     return $info;
+}
+
+/**
+ * Выбирает картинки для записи в базу — у Эгеи хранятся использованные картинки
+ * @param string $content
+ * @return array
+ */
+function extractImages(string $content):array
+{
+    if (preg_match_all('/^\S+?\.jpg/m', $content, $m)) {
+        return $m[0];
+    }
+
+    return [];
+}
+
+/**
+ * Экранирование строки для запись в БД
+ * @param string $str
+ * @return string
+ */
+function escape(string $str):string
+{
+    return addcslashes($str, "\n\r\0'");
 }
 
 // Сюда записываем дамп с заметками
@@ -457,35 +483,41 @@ fwrite($fp, "TRUNCATE TABLE e2BlogNotes;\n");
 fwrite($tp, "TRUNCATE TABLE e2BlogKeywords;\n");
 fwrite($tp, "TRUNCATE TABLE e2BlogNotesKeywords;\n");
 
-foreach (c(fn() => getNoteLinks(BASE_URL), 'note_links') as $url) {
-    $content = c(fn() => getNote($url), 'note_'.sha1($url));
+foreach (c(fn () => getNoteLinks(BASE_URL), 'note_links') as $url) {
+    $content = c(fn () => getNote($url), 'note_'.sha1($url));
     $info = parseNote($content);
 
     // SQL для заметок
-    fprintf($fp, <<<'SQL'
+    fprintf(
+        $fp,
+        <<<'SQL'
     INSERT INTO e2BlogNotes
     (
         Title, Text, FormatterID, Uploads, IsPublished, IsCommentable, IsVisible,
         IsFavourite, Stamp, LastModified, Offset, IsDST, IsIndexed, IsExternal,
         SourceID, SourceNoteURL
     ) VALUES (
-        '%s', '%s', 'neasden', 'a:0:{}', 1, 1, 1, 0,
-        %3$d, %3$d, 3 * 60 * 60, 0, 0, 0, 0, 0
+        '%s',
+        '%s',
+        'neasden',
+        '%s',
+        1, 1, 1, 0, %3$d, %3$d, 3 * 60 * 60, 0, 0, 0, 0, 0
     );
 
     SQL,
-    addcslashes($info['title'], "\n\r\0'"),
-    addcslashes($info['text'], "\n\r\0'"),
-    $info['ctime']->format('U'),
+        escape($info['title']),
+        escape($info['text']),
+        escape(serialize($info['images'])),
+        $info['ctime']->format('U'),
     );
 
     foreach ($info['tags'] as [$tag, $name]) {
-        $etag = addcslashes($tag, "\n\r\0'");
-
         // SQL вставки тегов в таблицу тегов и связь с заметками.
         // С ID заметок я решил не связываться, дата и время является
         // достаточный маркером
-        fprintf($tp, <<<'SQL'
+        fprintf(
+            $tp,
+            <<<'SQL'
             INSERT INTO e2BlogKeywords (Keyword, OriginalAlias, Uploads, IsFavourite)
             SELECT '%s', '%2$s', 'a:0:{}', 0
             FROM DUAL
@@ -500,8 +532,8 @@ foreach (c(fn() => getNoteLinks(BASE_URL), 'note_links') as $url) {
             WHERE Stamp=%d;
 
             SQL,
-            addcslashes($name, "\n\r\0'"),
-            $etag,
+            escape($name),
+            escape($tag),
             $info['ctime']->format('U'),
         );
     }
