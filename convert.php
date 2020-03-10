@@ -12,17 +12,17 @@ const BASE_URL = 'https://web.archive.org/web/'.BASE_DATE.'/http://glazelki.ru:8
  */
 function c(callable $fn, string $key) /*:mixed*/
 {
-	$cache_dir = __DIR__.'/cache/';
-	$cache_file = $cache_dir . $key;
+    $cache_dir = __DIR__.'/cache/';
+    $cache_file = $cache_dir . $key;
 
-	if (!file_exists($cache_dir)) {
-		mkdir($cache_dir);
-	}
+    if (!file_exists($cache_dir)) {
+        mkdir($cache_dir);
+    }
 
-	$key = strtr($key, ['/' => '_']);
+    $key = strtr($key, ['/' => '_']);
 
-	if (file_exists($cache_file)) {
-	    printf("Got cache: %s\n", $key);
+    if (file_exists($cache_file)) {
+        printf("Got cache: %s\n", $key);
         return unserialize(file_get_contents($cache_file));
     } else {
         $content = $fn();
@@ -47,36 +47,36 @@ function getNoteLinks(string $url): array
     $notes = [];
 
     do {
-    	printf("Getting %s\n", $url);
-		$content = file_get_contents($url);
-		if ($content === false) {
-			throw new RuntimeException();
-		}
+        printf("Getting %s\n", $url);
+        $content = file_get_contents($url);
+        if ($content === false) {
+            throw new RuntimeException();
+        }
 
-		// Ищем переходы на страницы
-		if (preg_match_all($page_pat, $content, $m)) {
-		    $pages += array_fill_keys($m[1],false);
-	    }
+        // Ищем переходы на страницы
+        if (preg_match_all($page_pat, $content, $m)) {
+            $pages += array_fill_keys($m[1],false);
+        }
 
-	    // ищем ссылки на заметки
-	    if (preg_match_all($note_pat, $content, $m)) {
-	    	$notes = array_unique([...$notes, ...$m[0]]);
-	    }
+        // ищем ссылки на заметки
+        if (preg_match_all($note_pat, $content, $m)) {
+            $notes = array_unique([...$notes, ...$m[0]]);
+        }
 
-	    // есть ли непосещённые урлы?
-	    $urls = array_keys($pages, false);
-	    if ($urls) {
-	    	$url = sprintf($page_fmt, BASE_DATE, $urls[0]);
-	    	$pages[$urls[0]] = true;
-	    } else {
-	    	$url = false;
-	    }
+        // есть ли непосещённые урлы?
+        $urls = array_keys($pages, false);
+        if ($urls) {
+            $url = sprintf($page_fmt, BASE_DATE, $urls[0]);
+            $pages[$urls[0]] = true;
+        } else {
+            $url = false;
+        }
 
-	} while ($url !== false);
+    } while ($url !== false);
 
-	printf("Received %d urls.\n", count($notes));
+    printf("Received %d urls.\n", count($notes));
 
-	return array_values($notes);
+    return array_values($notes);
 }
 
 /**
@@ -86,14 +86,14 @@ function getNoteLinks(string $url): array
  */
 function getNote(string $url):string
 {
-	printf("Getting %s\n", $url);
-	$content = file_get_contents($url);
+    printf("Getting %s\n", $url);
+    $content = file_get_contents($url);
 
-	if ($content === false) {
-		throw new RuntimeException();
-	}
+    if ($content === false) {
+        throw new RuntimeException();
+    }
 
-	return $content;
+    return $content;
 }
 
 /**
@@ -105,38 +105,38 @@ function getNote(string $url):string
  */
 function downloadPicture(string $url, string $date_str, int $n):string
 {
-	$cache_dir = __DIR__.'/pictures/';
+    $cache_dir = __DIR__.'/pictures/';
 
-	if (!file_exists($cache_dir)) {
-		mkdir($cache_dir);
-	}
+    if (!file_exists($cache_dir)) {
+        mkdir($cache_dir);
+    }
 
-	$cache_mask = sprintf("%s%s.%s*", $cache_dir, $date_str, $n);
-	$files = glob($cache_mask);
+    $cache_mask = sprintf("%s%s.%s*", $cache_dir, $date_str, $n);
+    $files = glob($cache_mask);
 
-	if ($files && filesize($files[0]) > 0) {
-		$new_name = basename($files[0]);
-		printf("Got cache: %s\n", $new_name);
+    if ($files && filesize($files[0]) > 0) {
+        $new_name = basename($files[0]);
+        printf("Got cache: %s\n", $new_name);
 
-		return $new_name;
-	}
+        return $new_name;
+    }
 
-	$tmp_name = tempnam(sys_get_temp_dir(), 'glaz');
-	$url = preg_replace('/_[a-z]+(?:\.[.a-z]+)?$/i', '_orig', $url);
+    $tmp_name = tempnam(sys_get_temp_dir(), 'glaz');
+    $url = preg_replace('/_[a-z]+(?:\.[.a-z]+)?$/i', '_orig', $url);
 
-	printf("Downloading %s\n", $url);
-	copy($url, $tmp_name);
+    printf("Downloading %s\n", $url);
+    copy($url, $tmp_name);
 
-	$width = getimagesize($tmp_name)[0];
-	if ($width >= 2000) {
-		$new_name = sprintf("%s%s.%s@2x.jpg", $cache_dir, $date_str, $n);
-	} else {
-		$new_name = sprintf("%s%s.%s.jpg", $cache_dir, $date_str, $n);
-	}
+    $width = getimagesize($tmp_name)[0];
+    if ($width >= 2000) {
+        $new_name = sprintf("%s%s.%s@2x.jpg", $cache_dir, $date_str, $n);
+    } else {
+        $new_name = sprintf("%s%s.%s.jpg", $cache_dir, $date_str, $n);
+    }
 
-	rename($tmp_name, $new_name);
+    rename($tmp_name, $new_name);
 
-	return basename($new_name);
+    return basename($new_name);
 }
 
 /**
@@ -160,11 +160,11 @@ function fixPictures(string $content, array $info):string
             $src = preg_replace('!https://web.archive.org/web/[^/]+/!s', '', $attrs['src']);
 
             if (strpos($src, 'simple-smile.png') !== false) {
-            	$images[$tag] = '🙂';
+                $images[$tag] = '🙂';
             } else {
-	            $newname = downloadPicture($src, $info['ctime']->format('Y.m.d.H.i'), count($images) + 1);
-	            $images[$tag] = sprintf("%s\n%s\n", $newname, rtrim($attrs['alt'] ?? $attrs['title'] ?? '', '.'));
-	        }
+                $newname = downloadPicture($src, $info['ctime']->format('Y.m.d.H.i'), count($images) + 1);
+                $images[$tag] = sprintf("%s\n%s\n", $newname, rtrim($attrs['alt'] ?? $attrs['title'] ?? '', '.'));
+            }
         }
     }
 
@@ -206,11 +206,11 @@ function fixLinks(string $content):string
             $text = trim(strip_tags($t->html()->child[1]->child[0]->child[0]->value));
 
             $href = preg_replace(
-            	'!https://web.archive.org/web/\d+/http://glazelki.ru/!s',
-            	'',
-            	$attrs['href'],
-            	-1,
-            	$cnt
+                '!https://web.archive.org/web/\d+/http://glazelki.ru/!s',
+                '',
+                $attrs['href'],
+                -1,
+                $cnt
             );
 
             if ($cnt === 0) {
@@ -230,10 +230,10 @@ function fixLinks(string $content):string
 
                 // Ссылка на подписку, убираем её
                 if (strpos($href, 'feedburner.google.com/fb/a/mailverify') !== false) {
-                	$links[$tag] = '';
+                    $links[$tag] = '';
                 } else {
-	                $links[$tag] = sprintf('[[%s %s]]', $href, $text);
-	            }
+                    $links[$tag] = sprintf('[[%s %s]]', $href, $text);
+                }
 
                 continue;
             }
@@ -263,11 +263,11 @@ function fixLinks(string $content):string
 
 function toTranslit(string $cyr):string
 {
-	$latin = getTrans()->transliterate($cyr);
-	$latin = iconv("UTF-8", "ASCII//TRANSLIT", $latin);
-	$latin = preg_replace('/[^a-z-]/s', '', $latin);
+    $latin = getTrans()->transliterate($cyr);
+    $latin = iconv("UTF-8", "ASCII//TRANSLIT", $latin);
+    $latin = preg_replace('/[^a-z-]/s', '', $latin);
 
-	return $latin;
+    return $latin;
 }
 
 /**
@@ -278,20 +278,20 @@ function toTranslit(string $cyr):string
  */
 function fixMarkup(string $content, array $info):string
 {
-	// замена списков
-	$content = preg_replace(
-		[
-			'!</?[uo]l>!',
-			'!<li>!',
-			'!</li>!',
-		],
-		[
-			'',
-			' - ',
-			'',
-		],
-		$content
-	);
+    // замена списков
+    $content = preg_replace(
+        [
+            '!</?[uo]l>!',
+            '!<li>!',
+            '!</li>!',
+        ],
+        [
+            '',
+            ' - ',
+            '',
+        ],
+        $content
+    );
 
     $content = preg_replace(
         [
@@ -351,12 +351,12 @@ function fixMarkup(string $content, array $info):string
 
     // цитата
     $content = preg_replace_callback(
-    	'!<blockquote>(.*?)</blockquote>!s',
-    	function (array $m):string {
-    		$content = preg_replace('/^/m', '> ', strip_tags($m[1]));
-    		return $content;
-    	},
-    	$content
+        '!<blockquote>(.*?)</blockquote>!s',
+        function (array $m):string {
+            $content = preg_replace('/^/m', '> ', strip_tags($m[1]));
+            return $content;
+        },
+        $content
     );
 
     return trim($content);
@@ -368,21 +368,21 @@ function getTags(string $content):array
 
     $doc = new DOMDocument();
     libxml_use_internal_errors(true);
-	$doc->loadHTML($xhtml);
-	$xpath = new DOMXPath($doc);
+    $doc->loadHTML($xhtml);
+    $xpath = new DOMXPath($doc);
 
-	$links = [];
+    $links = [];
 
     foreach ($xpath->query('//a[@rel="tag"]') as $tag) {
-    	$text = mb_strtolower($tag->nodeValue, 'UTF-8');
-    	$href = $tag->attributes->getNamedItem('href')->value;
-    	$href = urldecode(preg_replace('!^.*?/tag/([^/]+)/?!s', '$1', $href));
+        $text = mb_strtolower($tag->nodeValue, 'UTF-8');
+        $href = $tag->attributes->getNamedItem('href')->value;
+        $href = urldecode(preg_replace('!^.*?/tag/([^/]+)/?!s', '$1', $href));
 
-    	$latin = toTranslit($href);
-    	$links[] = [$latin, $text];
+        $latin = toTranslit($href);
+        $links[] = [$latin, $text];
     }
 
-	return $links;
+    return $links;
 }
 
 /**
@@ -393,21 +393,21 @@ function getTags(string $content):array
  */
 function parseNote(string $content):array
 {
-	$info = [];
-	$date_pat = '!<span class="entry-date" title="(\d+):(\d+)">(\d+)\.(\d+)\.(\d+)</span>!s';
-	$head_pat = '!<h1 class="art-postheader">(.*?)</h1>!s';
-	$cont_pat = '@<!-- article-content -->(.*?)<!--(?:Start Share Buttons| /article-content)@s';
+    $info = [];
+    $date_pat = '!<span class="entry-date" title="(\d+):(\d+)">(\d+)\.(\d+)\.(\d+)</span>!s';
+    $head_pat = '!<h1 class="art-postheader">(.*?)</h1>!s';
+    $cont_pat = '@<!-- article-content -->(.*?)<!--(?:Start Share Buttons| /article-content)@s';
     $knob_pat = '<div style="clear:both;"></div><div class="header_text" style="text-align:"><h3>Поделиться в соц. сетях';
 
-	// пытаемся получить дату
-	if (!preg_match($date_pat, $content, $m)) {
-		throw new RuntimeException();
-	}
+    // пытаемся получить дату
+    if (!preg_match($date_pat, $content, $m)) {
+        throw new RuntimeException();
+    }
 
-	$date_str = sprintf('%d/%d/%d %d:%d:00', $m[5], $m[4], $m[3], $m[1], $m[2]);
-	$info['ctime'] = new DateTimeImmutable($date_str, new DateTimeZone('Europe/Moscow'));
+    $date_str = sprintf('%d/%d/%d %d:%d:00', $m[5], $m[4], $m[3], $m[1], $m[2]);
+    $info['ctime'] = new DateTimeImmutable($date_str, new DateTimeZone('Europe/Moscow'));
 
-	// пытаемся получить заголовок
+    // пытаемся получить заголовок
     if (!preg_match($head_pat, $content, $m)) {
         throw new RuntimeException();
     }
@@ -445,49 +445,49 @@ fwrite($tp, "TRUNCATE TABLE e2BlogKeywords;\n");
 fwrite($tp, "TRUNCATE TABLE e2BlogNotesKeywords;\n");
 
 foreach (c(fn() => getNoteLinks(BASE_URL), 'note_links') as $url) {
-	$content = c(fn() => getNote($url), 'note_'.sha1($url));
-	$info = parseNote($content);
+    $content = c(fn() => getNote($url), 'note_'.sha1($url));
+    $info = parseNote($content);
 
-	fprintf($fp, <<<'SQL'
-	INSERT INTO e2BlogNotes
-	(
-		Title, Text, FormatterID, Uploads, IsPublished, IsCommentable, IsVisible,
-		IsFavourite, Stamp,	LastModified, Offset, IsDST, IsIndexed, IsExternal,
-		SourceID, SourceNoteURL
-	) VALUES (
-		'%s', '%s', 'neasden', 'a:0:{}', 1, 1, 1, 0,
-		%3$d, %3$d, 3 * 60 * 60, 0, 0, 0, 0, 0
-	);
+    fprintf($fp, <<<'SQL'
+    INSERT INTO e2BlogNotes
+    (
+        Title, Text, FormatterID, Uploads, IsPublished, IsCommentable, IsVisible,
+        IsFavourite, Stamp, LastModified, Offset, IsDST, IsIndexed, IsExternal,
+        SourceID, SourceNoteURL
+    ) VALUES (
+        '%s', '%s', 'neasden', 'a:0:{}', 1, 1, 1, 0,
+        %3$d, %3$d, 3 * 60 * 60, 0, 0, 0, 0, 0
+    );
 
-	SQL,
-	addcslashes($info['title'], "\n\r\0'"),
-	addcslashes($info['text'], "\n\r\0'"),
-	$info['ctime']->format('U'),
-	);
+    SQL,
+    addcslashes($info['title'], "\n\r\0'"),
+    addcslashes($info['text'], "\n\r\0'"),
+    $info['ctime']->format('U'),
+    );
 
-	foreach ($info['tags'] as [$tag, $name]) {
-		$etag = addcslashes($tag, "\n\r\0'");
+    foreach ($info['tags'] as [$tag, $name]) {
+        $etag = addcslashes($tag, "\n\r\0'");
 
-		fprintf($tp, <<<'SQL'
-			INSERT INTO e2BlogKeywords (Keyword, OriginalAlias, Uploads, IsFavourite)
-			SELECT '%s', '%2$s', 'a:0:{}', 0
-			FROM DUAL
-			WHERE NOT EXISTS (
-			    SELECT * FROM e2BlogKeywords
-			    WHERE OriginalAlias='%2$s' LIMIT 1
-			);
+        fprintf($tp, <<<'SQL'
+            INSERT INTO e2BlogKeywords (Keyword, OriginalAlias, Uploads, IsFavourite)
+            SELECT '%s', '%2$s', 'a:0:{}', 0
+            FROM DUAL
+            WHERE NOT EXISTS (
+                SELECT * FROM e2BlogKeywords
+                WHERE OriginalAlias='%2$s' LIMIT 1
+            );
 
-			INSERT INTO e2BlogNotesKeywords(SubsetID, NoteID, KeywordID)
-			SELECT 0, n.id, (SELECT id FROM e2BlogKeywords WHERE OriginalAlias='%2$s' LIMIT 1)
-			FROM e2BlogNotes n
-			WHERE Stamp=%d;
+            INSERT INTO e2BlogNotesKeywords(SubsetID, NoteID, KeywordID)
+            SELECT 0, n.id, (SELECT id FROM e2BlogKeywords WHERE OriginalAlias='%2$s' LIMIT 1)
+            FROM e2BlogNotes n
+            WHERE Stamp=%d;
 
-			SQL,
-			addcslashes($name, "\n\r\0'"),
-			$etag,
-			$info['ctime']->format('U'),
-		);
-	}
+            SQL,
+            addcslashes($name, "\n\r\0'"),
+            $etag,
+            $info['ctime']->format('U'),
+        );
+    }
 }
 
 fclose($fp);
