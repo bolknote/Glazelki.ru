@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 const BASE_DATE = '20170923015827';
 const BASE_URL = 'https://web.archive.org/web/'.BASE_DATE.'/http://glazelki.ru:80/';
-const INFO = true;
+const INFO = false;
 
 /**
  * Функия кеширования ответа
@@ -550,6 +550,14 @@ function getComment(string $part):array
         $gip_name = $provider[0]->attributes->getNamedItem('alt')->value;
         if ($gip_name === 'vk.com') {
             $gip = 'vk';
+
+            // выделяем ID профиля Вконтакте
+            $profile = $xpath->query('//cite/a[@class="url"]')[0]->attributes->getNamedItem('href')->value;
+            if (preg_match('<vk\.com/id(\d+)>s', $profile, $m)) {
+                $aname = $m[1];
+            } else {
+                throw new RuntimeException();
+            }
         }
     }
 
