@@ -4,3 +4,4 @@ dump3.sql
 pictures/
 cache/
 .idea/
+.php_cs.cache
