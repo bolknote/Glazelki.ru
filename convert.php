@@ -634,7 +634,7 @@ foreach (c(fn () => getNoteLinks(BASE_URL), 'note_links') as $url) {
         '%s',
         'neasden',
         '%s',
-        1, 1, 1, 0, %3$d, %3$d, 3 * 60 * 60, 0, 0, 0, 0, 0,
+        1, 1, 1, 0, %3$d, %3$d, 3 * 60 * 60, 0, 0, 0, 0, '',
         '%5$s'
     );
 
